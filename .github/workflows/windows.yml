@@ -1,0 +1,61 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run CTAPHID framing tests
+        run: cargo test --locked
+
+      - name: Build Windows tray prototype
+        run: cargo build --release --locked
+
+      - name: Upload prototype executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: virtkey-windows-prototype
+          path: target/release/virtkey.exe
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - name: Download prototype executable
+        uses: actions/download-artifact@v4
+        with:
+          name: virtkey-windows-prototype
+          path: dist
+
+      - name: Publish tagged prototype release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/virtkey.exe
